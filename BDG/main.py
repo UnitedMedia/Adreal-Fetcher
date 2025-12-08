@@ -68,7 +68,7 @@ def fetch_adreal_data(request):
 
         # BDG competitors
         parent_brand_ids = ["39892", "76032", "74235", "14321", "13255", "1230", "1227", "1228", "2845",
-                            "75026", "6795", "17086", "2353", "40564", "1332", "81289", "21927", "94974", "94306"]
+                            "75026", "6795", "17086", "2353", "40564", "1332", "81289", "21927", "94974", "94306", "1501", "94975"]
    
         # Fetch and process data
         df = run_adreal_pipeline(username, password, parent_brand_ids=parent_brand_ids)

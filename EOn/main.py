@@ -67,46 +67,12 @@ def fetch_adreal_data(request):
         password = access_secret("adreal-password")
 
         # EOn competitors
-        parent_brand_ids = ["95012", "93989", "64553", 
-                            "94985", # E.ON solutii incalzire & racire
-                            "94986", # E.ON Centrala termica
-                            "94988", # E.ON Pompe caldura
-                            "96090", # EON Drive
-                            "94984", # E.ON Energie
-                            "93994", # E.ON Green Energy
-                            "93993", # E.ON Servicii Tehnice
-                            "98380", # E.On Solar Home
-                            "43287", # Electrica Furnizare
-                            "95175", # Enel Aer conditionat
-                            "95176", # Enel Centrale termice
-                            "95174", # Enel servicii pentru casa
-                            "95172", # Enel Energy
-                            "94001", # Enel Green Energy
-                            "94000", # Enel Servicii tehnice
-                            "94996", # Energie
-                            "93600", # Engie centrale termice
-                            "95019", # Engie pompa caldura
-                            "93984", # Engie CSR
-                            "95015", # Engie Energie
-                            "93983", # Engie Green Energy
-                            "95198", # Engie Statii de incarcare
-                            "95017", # Engie solutii de incarcare&racire
-                            "95014", # Evryo
-                            "95181", # Evryo Energy
-                            "95180", # Evryo Maratonul Olteniei
-                            "94999", "95005", "95036", # Green energy - toate 3 - care e cel bun?
-                            "23942", # Hidroelectrica
-                            "64451", # Maratonul olteniei dont use in 2024
-                            "77108", # MyElectrica
-                            "95003", # PPC aer conditionat
-                            "95004", # PPC centrale termice
-                            "95002", # PPC servicii pentru casa
-                            "97977", # PPC Blue
-                            "95169", # PPC energy
-                            "94931", # PPC Green energy
-                            "94932", # PPC Servicii tehnice
-                            "94920", # Premier energy
-                            "94922", # PRemier energy electric
+        parent_brand_ids = ["94927", # PPC Energie SA
+                            "24172", # EON ROMANIA
+                            "18540", # Engie Romania
+                            "23941", # Hidroelectrica
+                            "94920", # Premier Energy
+                            "43284"  # Electrica furnizare
                             ]
    
         # Fetch and process data

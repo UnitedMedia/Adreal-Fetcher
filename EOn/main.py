@@ -94,7 +94,7 @@ def fetch_adreal_data(request):
                             "95014", # Evryo
                             "95181", # Evryo Energy
                             "95180", # Evryo Maratonul Olteniei
-                            "94999", "95005", "95036" # Green energy - toate 3 - care e cel bun?
+                            "94999", "95005", "95036", # Green energy - toate 3 - care e cel bun?
                             "23942", # Hidroelectrica
                             "64451", # Maratonul olteniei dont use in 2024
                             "77108", # MyElectrica

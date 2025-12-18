@@ -111,7 +111,7 @@ def clean_data(df):
         df = df.drop("Product", axis=1)
 
     # Ensure all columns expected by BQ exist
-    expected_columns = ["Date", "BrandOwner", "Brand", "ContentType", "MediaOwner", "MediaChannel", "AdContacts"]
+    expected_columns = ["Date", "BrandOwner", "Brand", "ContentType", "MediaChannel", "AdContacts"]
     for col in expected_columns:
         if col not in df.columns:
             df[col] = None  # fill missing columns with None

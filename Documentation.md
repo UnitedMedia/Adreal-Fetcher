@@ -182,3 +182,15 @@ gcloud secrets add-iam-policy-binding adreal-password \
   --role="roles/secretmanager.secretAccessor"
 ```
 Once this is done, the Cloud Function can securely retrieve credentials via the SecretManagerServiceClient() class in Python.
+
+# Schedule the sql query (not very related)
+
+After appending the data from AdReal to the tables (monthly), the sql scripts/dashboards that will consume the data needs to be triggered as per client request.
+
+The client might request the sql script to run, for example, every 3 months starting from a date and it is not cron-like in BigQuery.
+The full documentation is in https://docs.cloud.google.com/bigquery/docs/reference/datatransfer/rpc/google.cloud.bigquery.datatransfer.v1
+
+The custom schedule will look like 
+```bash
+3 of feb,may,aug,nov 06:00
+```

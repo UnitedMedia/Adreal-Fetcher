@@ -86,7 +86,7 @@ def fetch_adreal_manual(username, password, year, month, parent_brand_ids=None, 
 
     stats_data = adreal_fetcher.fetch_data(
         parent_brand_ids,
-        platforms="pc,mobile",
+        platforms="pc",
         page_types="search,social,standard",
         segments="brand,product,content_type,website",
         limit=1000000

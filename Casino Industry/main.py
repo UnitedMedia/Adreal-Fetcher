@@ -4,7 +4,7 @@ import pandas as pd
 import traceback
 
 PROJECT_ID = "ums-adreal-471711"
-TABLE_ID = f"{PROJECT_ID}.Casino.DataImport"
+TABLE_ID = f"{PROJECT_ID}.Casino_Industry.DataImport"
 
 def access_secret(secret_id, version_id="latest"):
     """Fetch a secret from Secret Manager."""
@@ -66,15 +66,28 @@ def fetch_adreal_data(request):
         username = access_secret("adreal-username")
         password = access_secret("adreal-password")
 
-        # Magnor competitors
-        parent_brand_ids = ["98604", # Magnor
-                            "96054", # Tezaur investment group
-                            "13362", # B&B Shop
-                            "44788", # Service Electronice
-                            "73781", # Damiro Activ company
-                            "89217", # Bertus amanet
-                            "93654"  # Flip.ro
-                            ]
+        parent_brand_ids = ["14653", # Superbet
+                            "10190", # Betano
+                            "98245", # VBET
+                            "94967", # TOTOGAMING
+                            "11869", # Unibet
+                            "85779", # Vlad Casino
+                            "96731", # Winner
+                            "88918", # MaxBet
+                            "13888", # Fortuna
+                            "13254", # Casa pariurilor
+                            "13077", # Netbet
+                            "96064", # Million  casino online
+                            "19906", # Mozzart bet
+                            "15217", # Stanley bet
+                            "85603", # Legal Bet
+                            "94968", # Mr bit
+                            "96446", # Las vegas
+                            "1601", # fav bet
+                            "98583", # power bet
+                            "17967", # Game world
+                            "93763", # magic jackpot
+                    ]
    
         # Fetch and process data
         df = run_adreal_pipeline(username, password, parent_brand_ids=parent_brand_ids)

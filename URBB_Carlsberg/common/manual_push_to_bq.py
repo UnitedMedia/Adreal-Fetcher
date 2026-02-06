@@ -23,7 +23,7 @@ except ImportError:
         sys.exit(1)
 
 PROJECT_ID = "ums-adreal-471711"
-TABLE_ID = f"{PROJECT_ID}.DLG.DataImport"
+TABLE_ID = f"{PROJECT_ID}.Magnor.DataImport"
 
 def access_secret(secret_id, version_id="latest"):
     """Fetch a secret from GCP Secret Manager."""
@@ -54,8 +54,6 @@ def clean_manual_data(df, date_string):
 
     # Ensure correct column order
     expected_columns = ["Date", "BrandOwner", "Brand", "ContentType", "MediaOwner", "MediaChannel", "AdContacts"]
-    if "Product" in df.columns:
-        expected_columns.insert(3, "Product")
     df = df.reindex(columns=expected_columns)
 
     if "AdContacts" in df.columns:
@@ -133,12 +131,15 @@ def main():
         username = access_secret("adreal-username")
         password = access_secret("adreal-password")
 
-        parent_brand_ids = ["95300", "91130", "98190", "88586", "53389", "96897", "88685", # Braun
-                            "93674", "88597", "2531", "1488", # DeLonghi
-                            "91516", "98006", "27428", "13098", # Kenwood
-                            "96381", "96128", "88599", "97049", "97915",  "98115", "93961" # Nutribullet
-                            ]
-
+        parent_brand_ids = ["98604", # Magnor
+                    "96054", # Tezaur investment group
+                    "13362", # B&B Shop
+                    "44788", # Service Electronice
+                    "73781", # Damiro Activ company
+                    "89217", # Bertus amanet
+                    "93654"  # Flip.ro
+                    ]
+   
         # Fetch AdReal data for the requested month
         df = fetch_adreal_manual(username, password, args.year, args.month, parent_brand_ids=parent_brand_ids)
 

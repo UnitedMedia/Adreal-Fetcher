@@ -82,7 +82,7 @@ def fetch_adreal_data(request):
         username = access_secret("adreal-username")
         password = access_secret("adreal-password")
 
-        # Muller competitors
+        # DLG competitors
         parent_brand_ids = ["95300", "91130", "98190", "88586", "53389", "96897", "88685", # Braun
                             "93674", "88597", "2531", "1488", # DeLonghi
                             "91516", "98006", "27428", "13098", # Kenwood

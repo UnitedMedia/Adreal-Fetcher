@@ -7,7 +7,7 @@ import traceback
 import sys
 import os
 import time
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from google.cloud import secretmanager, bigquery
 import requests
 
@@ -28,37 +28,33 @@ except ImportError:
 PROJECT_ID = "ums-adreal-471711"
 TABLE_ID = f"{PROJECT_ID}.DLG.DataImport"
 
-# ------------ Helpers ------------
+# ---------------- Secrets ----------------
 
 def access_secret(secret_id: str, version_id: str = "latest") -> str:
-    """Fetch a secret from GCP Secret Manager."""
     client = secretmanager.SecretManagerServiceClient()
     name = f"projects/{PROJECT_ID}/secrets/{secret_id}/versions/{version_id}"
     response = client.access_secret_version(name=name)
     return response.payload.data.decode("UTF-8")
 
-def get_month_range(year: int, month: int):
-    """Return (start_date, end_date) in YYYYMMDD format for a given month."""
+# ---------------- Dates ----------------
+
+def get_month_range(year: int, month: int) -> Tuple[str, str]:
     start_date = datetime(year, month, 1)
-    next_month = start_date.replace(day=28) + timedelta(days=4)  # always in next month
+    next_month = start_date.replace(day=28) + timedelta(days=4)
     end_date = next_month - timedelta(days=next_month.day)
     return start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d")
 
-def get_manual_period_info(year: int, month: int):
-    """Return AdReal period string and date string for a manual month."""
+def get_manual_period_info(year: int, month: int) -> Tuple[str, str]:
     start_date, _ = get_month_range(year, month)
     adreal_period = f"month_{start_date}"
     date_string = datetime(year, month, 1).strftime("%Y-%m-01")
     return adreal_period, date_string
 
+# ---------------- Cleaning ----------------
+
 def clean_manual_data(df: pd.DataFrame, date_string: str) -> pd.DataFrame:
-    """Clean and reformat merged DataFrame, forcing the manual date."""
     df = gather_all.clean_data(df)
-
-    # Force month date
     df["Date"] = date_string
-
-    # Ensure ContentType is consistent (from MediaChannel)
     df["ContentType"] = df["MediaChannel"].apply(gather_all.decide_content_type)
 
     expected_columns = ["Date", "BrandOwner", "Brand", "Product", "ContentType", "MediaChannel", "AdContacts"]
@@ -67,20 +63,89 @@ def clean_manual_data(df: pd.DataFrame, date_string: str) -> pd.DataFrame:
     df["AdContacts"] = pd.to_numeric(df["AdContacts"], errors="coerce").fillna(0).astype(int)
     return df
 
-def _print_http_debug(err: requests.HTTPError):
-    """Print extra diagnostics for HTTP errors."""
-    resp = err.response
+# ---------------- 403 diagnosis + brand filtering ----------------
+
+def _is_permission_403(e: Exception) -> bool:
+    if not isinstance(e, requests.HTTPError):
+        return False
+    r = e.response
+    if r is None or r.status_code != 403:
+        return False
     try:
-        body = resp.text
+        # Gemius returns {"detail":"You do not have permission to perform this action."}
+        return "permission" in (r.text or "").lower()
     except Exception:
-        body = "<could not read body>"
-    print("\n--- HTTP DEBUG ---")
-    print("Status:", resp.status_code)
-    print("URL:", resp.url)
-    print("Response headers:", dict(resp.headers))
-    print("Response body (first 2000 chars):")
-    print(body[:2000])
-    print("--- END HTTP DEBUG ---\n")
+        return True
+
+def _try_fetch_stats(
+    username: str,
+    password: str,
+    market: str,
+    start: str,
+    end: str,
+    brand_ids: List[str],
+    platforms: str,
+    page_types: str,
+    segments: str,
+    limit: int,
+):
+    adreal_fetcher = gather_all.AdRealFetcher(username=username, password=password, market=market)
+    adreal_fetcher.login()
+    adreal_fetcher.period_range = f"{start},{end},month"
+    adreal_fetcher.period_label = adreal_fetcher._period_label_from_range(adreal_fetcher.period_range)
+
+    # This call prints your "GET ---> ..." line and raises HTTPError on 403
+    return adreal_fetcher.fetch_data(
+        brand_ids,
+        platforms=platforms,
+        page_types=page_types,
+        segments=segments,
+        limit=limit
+    )
+
+def _filter_allowed_brand_ids(
+    username: str,
+    password: str,
+    market: str,
+    start: str,
+    end: str,
+    brand_ids: List[str],
+    platforms: str,
+    page_types: str,
+    segments: str,
+    limit: int,
+) -> Tuple[List[str], List[str]]:
+    """
+    Returns (allowed_ids, forbidden_ids) by probing the API.
+    Strategy:
+      - If full list works => all allowed
+      - If full list 403 => split into halves and recurse
+      - When a single ID 403 => forbidden
+    """
+    def probe(ids: List[str]) -> Tuple[List[str], List[str]]:
+        if not ids:
+            return [], []
+        try:
+            _ = _try_fetch_stats(
+                username, password, market, start, end, ids,
+                platforms=platforms, page_types=page_types,
+                segments=segments, limit=limit
+            )
+            return ids, []
+        except Exception as e:
+            if not _is_permission_403(e):
+                raise
+            if len(ids) == 1:
+                return [], ids
+            mid = len(ids) // 2
+            left_allowed, left_forbidden = probe(ids[:mid])
+            right_allowed, right_forbidden = probe(ids[mid:])
+            return left_allowed + right_allowed, left_forbidden + right_forbidden
+
+    allowed, forbidden = probe(brand_ids)
+    return allowed, forbidden
+
+# ---------------- Main fetch ----------------
 
 def fetch_adreal_manual(
     username: str,
@@ -89,19 +154,14 @@ def fetch_adreal_manual(
     month: int,
     parent_brand_ids: Optional[List[str]] = None,
     market: str = "ro",
-    retries: int = 3,
 ) -> pd.DataFrame:
-    """
-    Fetch, merge, clean AdReal data for a manual month.
-    Retries the /stats call on 403 with re-login + backoff and prints response details.
-    """
     if parent_brand_ids is None:
         parent_brand_ids = []
 
     adreal_period, date_string = get_manual_period_info(year, month)
     print(f"Fetching data for period {adreal_period} ({date_string})")
 
-    # Fetch brands & websites (these already succeed for you)
+    # Brands & Publishers (these are OK)
     brand_fetcher = gather_all.BrandFetcher(username, password, market)
     brand_fetcher.login()
     brands_data = brand_fetcher.fetch_brands(period=adreal_period)
@@ -110,74 +170,66 @@ def fetch_adreal_manual(
     publisher_fetcher.login()
     websites_data = publisher_fetcher.fetch_publishers(period=adreal_period)
 
-    # Stats fetch (this is where you fail)
+    # Stats
     start, end = get_month_range(year, month)
 
-    last_exc = None
-    for attempt in range(1, retries + 1):
-        try:
-            adreal_fetcher = gather_all.AdRealFetcher(username=username, password=password, market=market)
-            adreal_fetcher.login()
+    platforms = "pc,mobile"
+    page_types = "search,social,standard"
+    segments = "brand,product,content_type,website"
+    limit = 1000000
 
-            # Ensure the fetcher is configured consistently
-            adreal_fetcher.period_range = f"{start},{end},month"
-            adreal_fetcher.period_label = adreal_fetcher._period_label_from_range(adreal_fetcher.period_range)
-
-            # Perform stats request
-            stats_data = adreal_fetcher.fetch_data(
-                parent_brand_ids,
-                platforms="pc,mobile",
-                page_types="search,social,standard",
-                segments="brand,product,content_type,website",
-                limit=1000000,
-            )
-
-            merged_rows = gather_all.merge_data(stats_data, brands_data, websites_data)
-            df = pd.DataFrame(merged_rows).drop_duplicates()
-            df = clean_manual_data(df, date_string)
-            return df
-
-        except requests.HTTPError as e:
-            last_exc = e
-            if e.response is not None and e.response.status_code == 403:
-                print(f"\n⚠️ 403 Forbidden on /stats (attempt {attempt}/{retries}).")
-                _print_http_debug(e)
-
-                # Backoff then retry (re-login happens each loop)
-                sleep_s = 3 * attempt
-                print(f"Retrying after {sleep_s}s...\n")
-                time.sleep(sleep_s)
-                continue
-            raise  # other HTTP errors should bubble up
-
-        except Exception as e:
-            last_exc = e
-            print(f"\n⚠️ Unexpected error on attempt {attempt}/{retries}: {type(e).__name__}: {e}")
-            if attempt < retries:
-                time.sleep(2 * attempt)
-                continue
+    try:
+        stats_data = _try_fetch_stats(
+            username, password, market, start, end, parent_brand_ids,
+            platforms=platforms, page_types=page_types, segments=segments, limit=limit
+        )
+    except Exception as e:
+        if not _is_permission_403(e):
             raise
 
-    # If we got here, all retries failed
-    if last_exc:
-        raise last_exc
-    raise RuntimeError("Failed to fetch AdReal manual data for unknown reasons.")
+        print("\n❌ 403 permission on full DLG brand list.")
+        print("➡️  Auto-diagnosing which brand IDs are forbidden... (this may take a bit)\n")
+
+        allowed_ids, forbidden_ids = _filter_allowed_brand_ids(
+            username, password, market, start, end, parent_brand_ids,
+            platforms=platforms, page_types=page_types, segments=segments, limit=limit
+        )
+
+        print("\n✅ Allowed brand IDs:", ",".join(allowed_ids) if allowed_ids else "(none)")
+        print("⛔ Forbidden brand IDs:", ",".join(forbidden_ids) if forbidden_ids else "(none)")
+        print("➡️  Proceeding with allowed IDs only.\n")
+
+        if not allowed_ids:
+            raise RuntimeError(
+                "All provided brand IDs are forbidden for /stats. "
+                "You need Gemius permissions for these brand IDs."
+            )
+
+        # Now fetch actual stats with allowed IDs
+        stats_data = _try_fetch_stats(
+            username, password, market, start, end, allowed_ids,
+            platforms=platforms, page_types=page_types, segments=segments, limit=limit
+        )
+
+    merged_rows = gather_all.merge_data(stats_data, brands_data, websites_data)
+    df = pd.DataFrame(merged_rows).drop_duplicates()
+    df = clean_manual_data(df, date_string)
+    return df
+
+# ---------------- BigQuery push ----------------
 
 def push_to_bigquery(df: pd.DataFrame, year: int, month: int):
-    """Load DataFrame into BigQuery, replacing only the current month."""
     client = bigquery.Client()
-
-    # Make Date a proper DATE
     df["Date"] = pd.to_datetime(df["Date"]).dt.date
 
-    # Safety: verify table schema columns exist
+    # Validate schema compatibility
     table = client.get_table(TABLE_ID)
     table_cols = {s.name for s in table.schema}
-    missing = [c for c in df.columns if c not in table_cols]
-    if missing:
-        raise ValueError(f"DataFrame has columns not in table schema {TABLE_ID}: {missing}")
+    extra_cols = [c for c in df.columns if c not in table_cols]
+    if extra_cols:
+        raise ValueError(f"DataFrame has columns not in BQ schema for {TABLE_ID}: {extra_cols}")
 
-    # Delete old rows for the month (only after we have data)
+    # Only delete after we successfully fetched data
     delete_query = f"""
     DELETE FROM `{TABLE_ID}`
     WHERE EXTRACT(YEAR FROM Date) = {year}
@@ -186,11 +238,12 @@ def push_to_bigquery(df: pd.DataFrame, year: int, month: int):
     print(f"Deleting existing rows for {year}-{month} from {TABLE_ID}...")
     client.query(delete_query).result()
 
-    # Load new rows
     job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
     load_job = client.load_table_from_dataframe(df, TABLE_ID, job_config=job_config)
     load_job.result()
-    print(f"Inserted {len(df)} rows into {TABLE_ID} for {year}-{month}")
+    print(f"Inserted {len(df)} rows into BigQuery for {year}-{month}")
+
+# ---------------- Entrypoint ----------------
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch AdReal data for a specific month and push to BigQuery.")
@@ -202,6 +255,7 @@ def main():
         username = access_secret("adreal-username")
         password = access_secret("adreal-password")
 
+        # DLG parent brand IDs (as you provided)
         parent_brand_ids = [
             # Braun
             "95300", "91130", "98190", "88586", "53389", "96897", "88685",
@@ -210,7 +264,7 @@ def main():
             # Kenwood
             "91516", "98006", "27428", "13098",
             # Nutribullet
-            "96381", "96128", "88599", "97049", "97915", "98115", "93961",
+            "96381", "96128", "88599", "97049", "97915", "98115", "93961"
         ]
 
         print("TARGET TABLE:", TABLE_ID)
@@ -218,8 +272,7 @@ def main():
         df = fetch_adreal_manual(
             username, password, args.year, args.month,
             parent_brand_ids=parent_brand_ids,
-            market="ro",
-            retries=3
+            market="ro"
         )
 
         if df.empty:

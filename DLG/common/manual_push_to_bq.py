@@ -53,9 +53,8 @@ def clean_manual_data(df, date_string):
     df['ContentType'] = df['MediaChannel'].apply(gather_all.decide_content_type)
 
     # Ensure correct column order
-    expected_columns = ["Date", "BrandOwner", "Brand", "ContentType", "MediaOwner", "MediaChannel", "AdContacts"]
+    expected_columns = ["Date", "BrandOwner", "Brand", "Product", "ContentType", "MediaChannel", "AdContacts"]
     df = df.reindex(columns=expected_columns)
-
     if "AdContacts" in df.columns:
         df["AdContacts"] = pd.to_numeric(df["AdContacts"], errors="coerce").fillna(0).astype(int)
     return df
@@ -104,7 +103,7 @@ def push_to_bigquery(df, year, month):
     df["Date"] = pd.to_datetime(df["Date"]).dt.date
 
     # Drop columns not in table schema
-    df = df.drop(columns=["MediaOwner"], errors="ignore")
+    #df = df.drop(columns=["MediaOwner"], errors="ignore")
 
     # Delete old rows for the month
     delete_query = f"""

@@ -18,7 +18,9 @@ def main():
                     "18540", # Engie Romania
                     "23941", # Hidroelectrica
                     "94920", # Premier Energy
-                    "43284"  # Electrica furnizare
+                    "43284",  # Electrica furnizare
+                    "95191", # Nova Power & Gas
+                    "94072" # ROMGAZ
                     ]
 
     df = run_adreal_pipeline(username, password, parent_brand_ids=parent_brand_ids)

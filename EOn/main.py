@@ -72,7 +72,9 @@ def fetch_adreal_data(request):
                             "18540", # Engie Romania
                             "23941", # Hidroelectrica
                             "94920", # Premier Energy
-                            "43284"  # Electrica furnizare
+                            "43284",  # Electrica furnizare
+                            "95191", # Nova Power & Gas
+                            "94072" # ROMGAZ
                             ]
    
         # Fetch and process data

@@ -7,7 +7,7 @@ PROJECT_ID = "ums-adreal-471711"
 TABLE_ID = f"{PROJECT_ID}.AllianzTiriac.DataImport"
 
 
-def access_secret(secret_id: str, version_id: str = "latest") -> str:
+def access_secret(secret_id, version_id="latest"):
     """Fetch a secret from Secret Manager."""
     client = secretmanager.SecretManagerServiceClient()
     name = f"projects/{PROJECT_ID}/secrets/{secret_id}/versions/{version_id}"
@@ -15,14 +15,11 @@ def access_secret(secret_id: str, version_id: str = "latest") -> str:
     return response.payload.data.decode("UTF-8")
 
 
-def push_to_bigquery(df: pd.DataFrame) -> str:
-    """
-    Load DataFrame into BigQuery, deleting/replacing only the months present in df.
-    Ensures schema matches DataImport: Date, BrandOwner, Brand, ContentType, MediaOwner, MediaChannel, AdContacts
-    """
+def push_to_bigquery(df):
+    """Load DataFrame into BigQuery, replacing only the current month(s)."""
     client = bigquery.Client()
 
-    # Map incoming column names to BigQuery schema
+    # Map columns to BigQuery schema
     df = df.rename(columns={
         "Brand owner": "BrandOwner",
         "Brand": "Brand",
@@ -30,61 +27,59 @@ def push_to_bigquery(df: pd.DataFrame) -> str:
         "Media owner": "MediaOwner",
         "Media channel": "MediaChannel",
         "Ad contacts": "AdContacts",
-        "Date": "Date",
+        "Date": "Date"
     })
 
-    # Ensure all required columns exist
-    required_cols = ["Date", "BrandOwner", "Brand", "ContentType", "MediaOwner", "MediaChannel", "AdContacts"]
+    # AllianzTiriac.DataImport does NOT have Product
+    required_cols = [
+        "Date",
+        "BrandOwner",
+        "Brand",
+        "ContentType",
+        "MediaOwner",
+        "MediaChannel",
+        "AdContacts"
+    ]
+
     for col in required_cols:
         if col not in df.columns:
             df[col] = None
 
-    # Keep only required columns in the expected order
-    df = df[required_cols].copy()
+    # Keep only required columns
+    df = df[required_cols]
 
-    # ---- Type enforcement (critical) ----
-    # Convert Date to python datetime.date (NOT string)
+    # Enforce types EXACTLY like Digi script
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
+    df["BrandOwner"] = df["BrandOwner"].astype(str)
+    df["Brand"] = df["Brand"].astype(str)
+    df["ContentType"] = df["ContentType"].astype(str)
+    df["MediaOwner"] = df["MediaOwner"].astype(str)
+    df["MediaChannel"] = df["MediaChannel"].astype(str)
+    df["AdContacts"] = pd.to_numeric(df.get("AdContacts"), errors="coerce").fillna(0).astype(int)
 
-    # Validate dates
-    if df["Date"].isna().all():
-        raise ValueError("All dates are missing/invalid; cannot load into BigQuery.")
-
-    # Cast text fields (keep None as None where possible)
-    for c in ["BrandOwner", "Brand", "ContentType", "MediaOwner", "MediaChannel"]:
-        df[c] = df[c].astype("string")  # pandas nullable string type
-
-    # Numeric
-    df["AdContacts"] = pd.to_numeric(df["AdContacts"], errors="coerce").fillna(0).astype(int)
-
-    # Preview logs
-    print("Incoming columns after rename:", list(df.columns))
     print("Preview of data to load:")
-    print(df.head(10))
-    print("Date dtype:", df["Date"].dtype)
-    first_date = df["Date"].dropna().iloc[0]
-    print("Sample Date value/type:", first_date, type(first_date))
+    print(df.head())
 
-    # Determine distinct months present in the new data (as first day of month)
-    months = pd.to_datetime(df["Date"]).to_period("M").dt.to_timestamp().dt.date.unique()
-    print("Months detected for replacement:", months)
+    if df["Date"].isna().all():
+        raise ValueError("All dates are missing; cannot load into BigQuery.")
 
-    # Delete old rows for those months
+    # SAME month logic as Digi (this is what works everywhere)
+    months = df["Date"].apply(lambda x: x.replace(day=1)).unique()
+
     for month in months:
         delete_query = f"""
         DELETE FROM `{TABLE_ID}`
         WHERE EXTRACT(YEAR FROM Date) = {month.year}
           AND EXTRACT(MONTH FROM Date) = {month.month}
         """
-        print(f"Deleting old rows for month {month}...")
+        print(f"Deleting old rows for {month}")
         client.query(delete_query).result()
 
-    # Load new data
     job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
     load_job = client.load_table_from_dataframe(df, TABLE_ID, job_config=job_config)
     load_job.result()
 
-    return f"Loaded {len(df)} rows into {TABLE_ID} (replaced months: {list(months)})"
+    return f"Loaded {len(df)} rows into {TABLE_ID} (replacing months: {months})"
 
 
 def fetch_adreal_data(request):
@@ -93,23 +88,27 @@ def fetch_adreal_data(request):
         username = access_secret("adreal-username")
         password = access_secret("adreal-password")
 
-        # AllianzTiriac competitors
-        parent_brand_ids = ["16241", "18297", "13218", "72921", "40239", "51446"]
+        parent_brand_ids = [
+            "16241",
+            "18297",
+            "13218",
+            "72921",
+            "40239",
+            "51446"
+        ]
 
-        # Fetch and process data
         df = run_adreal_pipeline(username, password, parent_brand_ids=parent_brand_ids)
         print("DataFrame fetched. Shape:", df.shape)
-        print("Columns:", list(df.columns))
+        print("Columns:", df.columns)
 
-        # Determine reporting period for logs (best-effort)
-        period_raw = get_correct_period()
-        period_date = pd.to_datetime(period_raw[-8:], format="%Y%m%d", errors="coerce")
-        period_date_str = period_date.strftime("%Y-%m-01") if pd.notna(period_date) else "unknown"
+        period_date = pd.to_datetime(
+            get_correct_period()[-8:],
+            format="%Y%m%d"
+        ).strftime("%Y-%m-01")
 
-        # Insert data into BigQuery
         result = push_to_bigquery(df)
 
-        return f"Data fetched for period {period_date_str}: {result}"
+        return f"Data fetched for period {period_date}: {result}"
 
     except Exception as e:
         print("Error occurred:")

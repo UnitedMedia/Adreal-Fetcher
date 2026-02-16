@@ -22,13 +22,15 @@ def push_to_bigquery(df):
         "Brand owner": "BrandOwner",
         "Brand": "Brand",
         "Content type": "ContentType",
+        "Media owner": "MediaOwner",
         "Media channel": "MediaChannel",
         "Ad contacts": "AdContacts",
         "Date": "Date"
     })
 
     # Ensure all required columns exist
-    required_cols = ["Date", "BrandOwner", "Brand", "ContentType", "MediaChannel", "AdContacts"]
+    required_cols = ["Date", "BrandOwner", "Brand", "ContentType", "MediaOwner", "MediaChannel", "AdContacts"]
+
     for col in required_cols:
         if col not in df.columns:
             df[col] = None  # Fill missing columns with None
@@ -37,13 +39,13 @@ def push_to_bigquery(df):
     df = df[required_cols]
 
     # Enforce types compatible with BigQuery
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
     df["BrandOwner"] = df["BrandOwner"].astype(str)
     df["Brand"] = df["Brand"].astype(str)
-    df["Product"] = df["Product"].astype(str)
     df["ContentType"] = df["ContentType"].astype(str)
+    df["MediaOwner"] = df["MediaOwner"].astype(str)
     df["MediaChannel"] = df["MediaChannel"].astype(str)
-    df["AdContacts"] = pd.to_numeric(df.get("AdContacts"), errors="coerce").fillna(0).astype(int)
+    df["AdContacts"] = pd.to_numeric(df["AdContacts"], errors="coerce").fillna(0).astype(int)
+
 
     print("Preview of data to load:")
     print(df.head())

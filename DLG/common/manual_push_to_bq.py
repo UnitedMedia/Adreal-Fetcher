@@ -173,7 +173,7 @@ def fetch_adreal_manual(
     # Stats
     start, end = get_month_range(year, month)
 
-    platforms = "pc,mobile"
+    platforms = "pc"
     page_types = "search,social,standard"
     segments = "brand,product,content_type,website"
     limit = 1000000

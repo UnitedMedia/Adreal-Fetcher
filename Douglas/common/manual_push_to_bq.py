@@ -131,8 +131,15 @@ def main():
         username = access_secret("adreal-username")
         password = access_secret("adreal-password")
 
-        parent_brand_ids = ["13549","93773","10566","49673","695","93648","16238","701","688","8196","89922","704","97637","93728", "6427"]
-   
+        parent_brand_ids = ["22562", # Notino
+                    "14135",
+                    "5605", # Sephora
+                    "94030", # Makeup.ro
+                    "32550", # Marionnaud
+                    "43787", # DM
+                    "20021", # BestValue
+                    ]
+        
         # Fetch AdReal data for the requested month
         df = fetch_adreal_manual(username, password, args.year, args.month, parent_brand_ids=parent_brand_ids)
 

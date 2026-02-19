@@ -24,7 +24,7 @@ except ImportError:
 
 PROJECT_ID = "ums-adreal-471711"
 TABLE_ID = f"{PROJECT_ID}.Douglas.DataImport"
-
+   
 def access_secret(secret_id, version_id="latest"):
     """Fetch a secret from GCP Secret Manager."""
     client = secretmanager.SecretManagerServiceClient()

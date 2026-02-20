@@ -23,7 +23,7 @@ except ImportError:
         sys.exit(1)
 
 PROJECT_ID = "ums-adreal-471711"
-TABLE_ID = f"{PROJECT_ID}.Muller.DataImport"
+TABLE_ID = f"{PROJECT_ID}.CandyHaier.DataImport"
 
 def access_secret(secret_id, version_id="latest"):
     """Fetch a secret from GCP Secret Manager."""
@@ -133,10 +133,7 @@ def main():
         username = access_secret("adreal-username")
         password = access_secret("adreal-password")
 
-        parent_brand_ids = [
-            "94444", "17127", "13367", "157", "51367", "11943", "13339",
-            "12681", "37469", "13343", "17986", "94501", "46544"
-        ]
+        parent_brand_ids = ["76815", "1056", "947", "2126", "12988", "15651", "1708", "15875", "1551", "92605", "1248", "17575", "90577", "91050", "5298", "35135"]
 
         # Fetch AdReal data for the requested month
         df = fetch_adreal_manual(username, password, args.year, args.month, parent_brand_ids=parent_brand_ids)
